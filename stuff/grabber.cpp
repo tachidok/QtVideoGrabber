@@ -1,30 +1,80 @@
 #include "grabber.h"
 
-int FD;
-int Width, Height;
-int bpp;
+// ================================================================
+// Constructor
+// ================================================================
+CCGrabber::CCGrabber(string format, string device)
+    : Initialised(false)
+{
+    // Set format
+    Format = format;
 
-float prom_tela=0, desv_tela=0, calidad_tela=0;
+    // Set device
+    Device = device;
 
-int dev_standard;
-int dev_input;
+    abrir_video(Format, Device);
+}
 
-int n_buffers;
-unsigned int textura[320];
+// ================================================================
+// Destructor
+// ================================================================
+CCGrabber::~CCGrabber()
+{ }
 
-unsigned char data_video[720*480*3];
-unsigned char data_video_l[360*240*3];
+// ================================================================
+// Reads a frame from the frame grabber and stores into an
+// unsigned char * variable
+// ================================================================
+int CCGrabber::read_frame()
+{
 
-CCImage *frames;
-sbuffer *buffers;
-unsigned int *temp_img;
-//int index;
-int c;
-int pixel_format;
-pthread_cond_t mySignal;
-pthread_mutex_t myMutex;
+        struct v4l2_buffer buf;//needed for memory mapping
+        //unsigned int i;
+        //unsigned int Bpf;//bytes per frame
 
-int xioctl (int fd, int request, void *arg)
+        CLEAR (buf);
+
+        buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+        buf.memory = V4L2_MEMORY_MMAP;
+
+        if (-1 == xioctl ((FD), VIDIOC_DQBUF, &buf))
+        {
+                switch (errno)
+                {
+                        case EAGAIN:
+                                return 0;
+
+                        case EIO://EIO ignored
+
+                        default:
+                                MABESA_ERROR ("VIDIOC_DQBUF");
+                }
+        }
+
+        assert (buf.index < n_buffers);
+
+        //Bpf = width*height*2;
+
+        memcpy(temp_img,buffers[buf.index].start,Width*Height*2);
+
+        process2a(temp_img, Width, Height);
+        //medicion (textura, 70, &prom_tela, &desv_tela, &calidad_tela);
+
+
+        //pthread_mutex_lock(&myMutex);
+        //pthread_cond_broadcast(&mySignal);
+        //pthread_mutex_unlock(&myMutex);
+
+        if (-1 == xioctl (FD, VIDIOC_QBUF, &buf))
+                MABESA_ERROR ("VIDIOC_QBUF");
+
+        return 1;
+
+}
+
+// ================================================================
+// ================================================================
+int CCGrabber::xioctl (int fd, int request, void *arg)
 {
         int r;
 
@@ -34,7 +84,7 @@ int xioctl (int fd, int request, void *arg)
         return r;
 }
 
-sbuffer *init_mmap (int * fd, char * dev_name, int * n_buffers)
+sbuffer *CCGrabber::init_mmap (int * fd, char * dev_name, int * n_buffers)
 {
         struct v4l2_requestbuffers req;
         //buffers is an array of n_buffers length, and every element store a frame
@@ -95,7 +145,10 @@ sbuffer *init_mmap (int * fd, char * dev_name, int * n_buffers)
         return buffers;
 }
 
-void open_device (int * fd, char * dev_name) {
+// ================================================================
+// ================================================================
+void CCGrabber::open_device (int * fd, char * dev_name)
+{
 
         struct stat st;
 
@@ -119,7 +172,10 @@ void open_device (int * fd, char * dev_name) {
                 exit (EXIT_FAILURE);
         }
 }
-void set_standard(int * fd, int dev_standard)
+
+// ================================================================
+// ================================================================
+void CCGrabber::set_standard(int * fd, int dev_standard)
 {
         struct v4l2_standard standard;
         v4l2_std_id st;
@@ -137,7 +193,9 @@ void set_standard(int * fd, int dev_standard)
         fprintf (stderr,"standard: %s\n", standard.name);
 }
 
-sbuffer *init_device (int * fd, char * dev_name, int width, int height, int * n_buffers, int pixel_format)
+// ================================================================
+// ================================================================
+sbuffer *CCGrabber::init_device (int * fd, char * dev_name, int width, int height, int * n_buffers, int pixel_format)
 {
         struct v4l2_capability cap;
         struct v4l2_cropcap cropcap;
@@ -227,8 +285,9 @@ sbuffer *init_device (int * fd, char * dev_name, int width, int height, int * n_
         return buffers;
 }
 
-
-void start_capturing (int * fd, int * n_buffers )
+// ================================================================
+// ================================================================
+void CCGrabber::start_capturing (int * fd, int * n_buffers )
 {
         unsigned int i;
         enum v4l2_buf_type type;
@@ -253,7 +312,9 @@ void start_capturing (int * fd, int * n_buffers )
                 MABESA_ERROR ("VIDIOC_STREAMON");
 }
 
-void stop_capturing (int * fd)
+// ================================================================
+// ================================================================
+void CCGrabber::stop_capturing (int * fd)
 {
         enum v4l2_buf_type type;
 
@@ -263,8 +324,9 @@ void stop_capturing (int * fd)
                 MABESA_ERROR ("VIDIOC_STREAMOFF");
 }
 
-
-int abrir_video(string standard, string deviceName)
+// ================================================================
+// ================================================================
+int CCGrabber::abrir_video(string standard, string deviceName)
 {
     //pixel_format[i] = cfg.getValueOfString(myClassesNames + ".pixel_format");
     int std=0;
@@ -297,7 +359,10 @@ int abrir_video(string standard, string deviceName)
     pthread_mutex_init(&myMutex,NULL);
 }
 
-int yuv2rgb(int y, int u, int v, char *r, char *g, char *b) {
+// ================================================================
+// ================================================================
+int CCGrabber::yuv2rgb(int y, int u, int v, char *r, char *g, char *b)
+{
 
    int r1, g1, b1;
    int c = y-16, d = u - 128, e = v - 128;
@@ -321,7 +386,10 @@ int yuv2rgb(int y, int u, int v, char *r, char *g, char *b) {
    *b = b1 ;
 }
 
-void process2(unsigned int *start, int w, int h) {
+// ================================================================
+// ================================================================
+void CCGrabber::process2(unsigned int *start, int w, int h)
+{
 
 //here is a possible way to remove the interlace from the grabber
         int i,j;
@@ -442,8 +510,10 @@ void process2(unsigned int *start, int w, int h) {
 #endif
 }
 
-
-void process2a(unsigned int *start, int w, int h) {
+// ================================================================
+// ================================================================
+void CCGrabber::process2a(unsigned int *start, int w, int h)
+{
 
 //here is a possible way to remove the interlace from the grabber
         int i,j,idx=0, offy=2;
@@ -534,49 +604,4 @@ void process2a(unsigned int *start, int w, int h) {
                 pixel_16+=w/2;
         }
 
-}
-
-int read_frame  () {
-
-        struct v4l2_buffer buf;//needed for memory mapping
-        //unsigned int i;
-        //unsigned int Bpf;//bytes per frame
-
-        CLEAR (buf);
-
-        buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-        buf.memory = V4L2_MEMORY_MMAP;
-
-        if (-1 == xioctl ((FD), VIDIOC_DQBUF, &buf))
-        {
-                switch (errno)
-                {
-                        case EAGAIN:
-                                return 0;
-
-                        case EIO://EIO ignored
-
-                        default:
-                                MABESA_ERROR ("VIDIOC_DQBUF");
-                }
-        }
-
-        assert (buf.index < n_buffers);
-
-        //Bpf = width*height*2;
-
-        memcpy(temp_img,buffers[buf.index].start,Width*Height*2);
-
-        process2a(temp_img, Width, Height);
-        //medicion (textura, 70, &prom_tela, &desv_tela, &calidad_tela);
-
-
-        //pthread_mutex_lock(&myMutex);
-        //pthread_cond_broadcast(&mySignal);
-        //pthread_mutex_unlock(&myMutex);
-
-        if (-1 == xioctl (FD, VIDIOC_QBUF, &buf))
-                MABESA_ERROR ("VIDIOC_QBUF");
-
-        return 1;
 }
