@@ -7,8 +7,7 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
 
-    Format = "NTSC";
-    Device = "/dev/video1";
+    Grabber_pt = new CCGrabber("/dev/video2", "NTSC");
 
     Timer = new QTimer(this);
 
@@ -18,52 +17,36 @@ MainWindow::MainWindow(QWidget *parent) :
 
 MainWindow::~MainWindow()
 {
+    delete Grabber_pt;
+    delete Timer;
+
     delete ui;
 }
 
 void MainWindow::trigger_frame_capture()
 {
-    int r;
+    qDebug() << "Before Grabber_pt->read_frame()";
 
-    // Initialise stuff
-    FD_ZERO (&FDS);
-    FD_SET (FD, &FDS);
-    TV.tv_sec = 2;
-    TV.tv_usec = 0;
+    // Read a frame from the grabber
+    Grabber_pt->read_frame();
 
-    // FD is in grabber.cpp !!!!!!!
-    r = select (FD + 1, &FDS, NULL, NULL, &TV);
-    if (r == -1)
-     {
-      GRABBER_ERROR("select");
-     }
-
-    if (r == 0)
-     {
-      fprintf (stderr, "select timeout\n");
-      //continue;
-     }
-
-    qDebug() << "Before read_frame()";
-
-    // function in grabber.h!!!!!!!!
-    read_frame();
-
-    qDebug() << "After read_frame()";
+    qDebug() << "After Grabber_pt->read_frame()";
 
     //QImage::Format_RGB32
-    int bpl = Width*3;
     // Use QImage::Format_RGB888 for a 3 channels image
-    QImage qimage(data_video, Width, Height, bpl, QImage::Format_RGB888);
+    QImage qimage(Grabber_pt->image_pt(), Grabber_pt->width(), Grabber_pt->height(), Grabber_pt->bpl(), QImage::Format_RGB888);
     ui->lbl_image->setPixmap(QPixmap::fromImage(qimage));
 
 }
 
 void MainWindow::on_btn_open_video_clicked()
 {
-    // function in grabber.cpp!!!!!!!!
-    abrir_video(Format, Device);
-
-    Timer->start(TIMER_TIMEOUT);
+    // Try to initialise video
+    bool initialised = Grabber_pt->initialise_video();
+    // Only start timer if video was correctly initialised
+    if (initialised)
+    {
+        Timer->start(TIMER_TIMEOUT);
+    }
 
 }

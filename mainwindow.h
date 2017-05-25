@@ -9,14 +9,9 @@
 
 #include <string>
 
-#include "stuff/grabber.h"
+#include "src/cc_grabber.h"
 
 #define TIMER_TIMEOUT 1000
-
-extern int FD;
-extern int Width;
-extern int Height;
-extern unsigned char data_video[720*480*3];
 
 namespace Ui {
 class MainWindow;
@@ -35,21 +30,7 @@ private:
 
     QTimer *Timer;
 
-    // ----------------------------------------------------------------
-    // ----------------------------------------------------------------
-    // Capture format
-    string Format;
-
-    // Capture device name
-    string Device;
-
-    // File descriptors set
-    fd_set FDS;
-
-    // A variable for time?
-    struct timeval TV;
-    // ----------------------------------------------------------------
-    // ----------------------------------------------------------------
+    CCGrabber *Grabber_pt;
 
 public slots:
 

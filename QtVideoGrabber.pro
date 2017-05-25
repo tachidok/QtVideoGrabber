@@ -15,10 +15,10 @@ TEMPLATE = app
 SOURCES += main.cpp\
         mainwindow.cpp \
     src/cc_image.cpp \
-    stuff/grabber.cpp
+    src/cc_grabber.cpp
 
 HEADERS  += mainwindow.h \
     src/cc_image.h \
-    stuff/grabber.h
+    src/cc_grabber.h
 
 FORMS    += mainwindow.ui

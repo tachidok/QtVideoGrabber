@@ -1,25 +1,82 @@
-#include "grabber.h"
+#include "cc_grabber.h"
 
 // ================================================================
 // Constructor
 // ================================================================
-CCGrabber::CCGrabber(string format, string device)
+CCGrabber::CCGrabber(string video_device, string video_format)
     : Initialised(false)
 {
-    // Set format
-    Format = format;
-
     // Set device
-    Device = device;
+    Video_device = video_device;
 
-    abrir_video(Format, Device);
+    // Set format
+    Video_format = video_format;
+
+    // Set image pointer to NULL
+    Image_pt = NULL;
+
 }
 
 // ================================================================
 // Destructor
 // ================================================================
 CCGrabber::~CCGrabber()
-{ }
+{
+    if (Initialised)
+    {
+        delete [] Image_pt;
+        Image_pt = NULL;
+    }
+}
+
+// ================================================================
+// ================================================================
+int CCGrabber::initialise_video()
+{
+    if (!Video_format.compare("NTSC")) // returns 0 if strings are equal
+    {
+        Width = 720;// 640;
+        Height = 480;//480;
+        N_channels = 3;
+        Video_device_standard_for_v4l2 = V4L2_STD_NTSC;
+    }
+    else if (!Video_format.compare("PAL")) // returns 0 if strings are equal
+    {
+        Width = 720;
+        Height = 576;
+        N_channels = 3;
+        Video_device_standard_for_v4l2 = V4L2_STD_PAL;
+    }
+    else // Non supported video format
+    {
+        Initialised = false;
+        return false;
+    }
+
+    // -----------------------------------
+    // Initiliase video stage
+    // -----------------------------------
+    // Open the device
+    open_device (&FD, (char*)Video_device.c_str());
+
+    // Set v4l2 standard
+    set_standard(&FD, Video_device_standard_for_v4l2);
+
+    // Initialise device
+    buffers = init_device(&FD, (char*)Video_device.c_str(), Width, Height, &n_buffers, pixel_format);
+
+    // Create storage for temporary image storage
+    temp_img = new unsigned int[Width*Height];
+
+    start_capturing (&FD, &n_buffers);
+
+    // Allocate memory for image storage
+    Image_pt = new unsigned char[Width*Height*N_channels];
+
+    Initialised = true;
+    return true;
+
+}
 
 // ================================================================
 // Reads a frame from the frame grabber and stores into an
@@ -27,6 +84,33 @@ CCGrabber::~CCGrabber()
 // ================================================================
 int CCGrabber::read_frame()
 {
+
+    // Security check
+    if (!Initialised)
+     {
+        return false;
+     }
+
+    int r;
+
+    // Initialise stuff
+    FD_ZERO (&FDS);
+    FD_SET (FD, &FDS);
+    TV.tv_sec = 2;
+    TV.tv_usec = 0;
+
+    // FD is in grabber.cpp !!!!!!!
+    r = select (FD + 1, &FDS, NULL, NULL, &TV);
+    if (r == -1)
+     {
+      GRABBER_ERROR("select");
+     }
+
+    if (r == 0)
+     {
+      fprintf (stderr, "select timeout\n");
+      //continue;
+     }
 
         struct v4l2_buffer buf;//needed for memory mapping
         //unsigned int i;
@@ -84,6 +168,8 @@ int CCGrabber::xioctl (int fd, int request, void *arg)
         return r;
 }
 
+// ================================================================
+// ================================================================
 sbuffer *CCGrabber::init_mmap (int * fd, char * dev_name, int * n_buffers)
 {
         struct v4l2_requestbuffers req;
@@ -326,41 +412,6 @@ void CCGrabber::stop_capturing (int * fd)
 
 // ================================================================
 // ================================================================
-int CCGrabber::abrir_video(string standard, string deviceName)
-{
-    //pixel_format[i] = cfg.getValueOfString(myClassesNames + ".pixel_format");
-    int std=0;
-
-    if (standard == "NTSC") {
-            Width = 720;// 640;
-            Height = 480;//480;
-            dev_standard = V4L2_STD_NTSC;
-            fprintf(stderr, "NTSC\n");
-
-    }
-    else if (standard == "PAL") {
-            Width = 720;
-            Height = 576;
-            dev_standard = V4L2_STD_PAL ;
-            fprintf(stderr, "PAL\n");
-    }
-
-    frames =new CCImage(Width,Height,3);
-    open_device (&FD, (char*)deviceName.c_str());
-    set_standard(&FD, dev_standard);
-
-    buffers = init_device (&FD, (char*)deviceName.c_str(), Width, Height, &n_buffers, pixel_format);
-
-    temp_img=new unsigned int[Width*Height];
-
-    start_capturing (&FD, &n_buffers);
-
-    pthread_cond_init(&mySignal,NULL);
-    pthread_mutex_init(&myMutex,NULL);
-}
-
-// ================================================================
-// ================================================================
 int CCGrabber::yuv2rgb(int y, int u, int v, char *r, char *g, char *b)
 {
 
@@ -400,7 +451,7 @@ void CCGrabber::process2(unsigned int *start, int w, int h)
         char r, g, b;
 
         pixel_16 = (unsigned int *)start;
-        pixel_24 = &data_video[0];
+        pixel_24 = &Image_pt[0];
 
         //int res=(int)pixel_24;
 
@@ -526,7 +577,7 @@ void CCGrabber::process2a(unsigned int *start, int w, int h)
         char r, g, b;
 
         pixel_16 = (unsigned int *)start;
-        pixel_24 = data_video;//frames->image;
+        pixel_24 = Image_pt;//frames->image;
         pixel_24_l = data_video_l;//frames->image;
 
         //int res=(int)pixel_24;
